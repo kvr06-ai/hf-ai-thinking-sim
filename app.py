@@ -93,15 +93,17 @@ homebrew_css = """
 }
 
 .prose a {
-    color: #00ff88 !important;
+    color: #ff6b35 !important;
     text-decoration: none !important;
-    text-shadow: 0 0 5px rgba(0, 255, 136, 0.5) !important;
+    text-shadow: 0 0 5px rgba(255, 107, 53, 0.5) !important;
+    border-bottom: 1px solid rgba(255, 107, 53, 0.3) !important;
 }
 
 .prose a:hover {
-    color: #00ff41 !important;
+    color: #ff4500 !important;
     text-decoration: underline !important;
-    text-shadow: 0 0 10px rgba(0, 255, 65, 0.7) !important;
+    text-shadow: 0 0 10px rgba(255, 69, 0, 0.7) !important;
+    border-bottom: 1px solid #ff4500 !important;
 }
 
 .prose strong {
