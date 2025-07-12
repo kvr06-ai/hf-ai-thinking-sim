@@ -1,0 +1,6 @@
+
+# requirements.txt for Budget-Aware LLM Reasoning Demo
+gradio
+transformers
+tiktoken
+huggingface_hub 

@@ -1,0 +1,17 @@
+
+# .gitignore for Budget-Aware LLM Reasoning Demo
+
+# Internal dev documents
+execution-plan.md
+
+# Python specifics
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment files
+.env
+
+# OS files
+.DS_Store 
