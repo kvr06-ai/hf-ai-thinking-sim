@@ -71,160 +71,208 @@ def animate_reasoning(case_name, budget_level, custom_prompt):
     for partial_text in simulate_typing(reasoning_trace):
         yield partial_text
 
-# Custom CSS for Homebrew-style theme
+# Custom CSS for Homebrew-style theme (matching the green terminal aesthetic)
 homebrew_css = """
-/* Homebrew-inspired theme with developer aesthetics */
+/* Homebrew-inspired green terminal theme */
 .gradio-container {
     font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace !important;
-    background: linear-gradient(135deg, #0d1117 0%, #161b22 100%) !important;
-    color: #c9d1d9 !important;
+    background: radial-gradient(ellipse at center, #0a0e0a 0%, #000000 100%) !important;
+    color: #00ff41 !important;
+    min-height: 100vh !important;
 }
 
 .prose h1, .prose h2, .prose h3 {
-    color: #58a6ff !important;
+    color: #00ff41 !important;
     font-weight: 600 !important;
+    text-shadow: 0 0 10px rgba(0, 255, 65, 0.3) !important;
 }
 
 .prose p, .prose li {
-    color: #c9d1d9 !important;
+    color: #00cc33 !important;
     line-height: 1.6 !important;
 }
 
 .prose a {
-    color: #79c0ff !important;
+    color: #00ff88 !important;
     text-decoration: none !important;
+    text-shadow: 0 0 5px rgba(0, 255, 136, 0.5) !important;
 }
 
 .prose a:hover {
-    color: #58a6ff !important;
+    color: #00ff41 !important;
     text-decoration: underline !important;
+    text-shadow: 0 0 10px rgba(0, 255, 65, 0.7) !important;
 }
 
 .prose strong {
-    color: #f0f6fc !important;
+    color: #00ff41 !important;
+    text-shadow: 0 0 8px rgba(0, 255, 65, 0.4) !important;
 }
 
 .prose em {
-    color: #7c3aed !important;
+    color: #00cc88 !important;
 }
 
 /* Input styling */
 .gr-textbox, .gr-dropdown, .gr-radio {
-    background: #21262d !important;
-    border: 1px solid #30363d !important;
-    color: #c9d1d9 !important;
-    border-radius: 6px !important;
+    background: rgba(0, 20, 0, 0.8) !important;
+    border: 1px solid #00aa33 !important;
+    color: #00ff41 !important;
+    border-radius: 4px !important;
+    box-shadow: inset 0 0 10px rgba(0, 255, 65, 0.1) !important;
 }
 
 .gr-textbox:focus, .gr-dropdown:focus {
-    border-color: #58a6ff !important;
-    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1) !important;
+    border-color: #00ff41 !important;
+    box-shadow: 0 0 0 2px rgba(0, 255, 65, 0.3), inset 0 0 10px rgba(0, 255, 65, 0.2) !important;
 }
 
 /* Button styling */
 .gr-button {
-    background: #238636 !important;
-    border: 1px solid #2ea043 !important;
-    color: #fff !important;
-    border-radius: 6px !important;
-    font-weight: 500 !important;
+    background: linear-gradient(135deg, #006600 0%, #00aa33 100%) !important;
+    border: 1px solid #00ff41 !important;
+    color: #000000 !important;
+    border-radius: 4px !important;
+    font-weight: 600 !important;
     transition: all 0.2s ease !important;
+    text-shadow: none !important;
 }
 
 .gr-button:hover {
-    background: #2ea043 !important;
+    background: linear-gradient(135deg, #00aa33 0%, #00ff41 100%) !important;
     transform: translateY(-1px) !important;
+    box-shadow: 0 4px 15px rgba(0, 255, 65, 0.3) !important;
 }
 
 /* Panel styling */
 .gr-panel {
-    background: #161b22 !important;
-    border: 1px solid #30363d !important;
-    border-radius: 8px !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+    background: rgba(0, 20, 0, 0.6) !important;
+    border: 1px solid #00aa33 !important;
+    border-radius: 6px !important;
+    box-shadow: 0 0 20px rgba(0, 255, 65, 0.1) !important;
 }
 
 /* Labels */
 .gr-label {
-    color: #f0f6fc !important;
-    font-weight: 500 !important;
+    color: #00ff41 !important;
+    font-weight: 600 !important;
     margin-bottom: 8px !important;
+    text-shadow: 0 0 5px rgba(0, 255, 65, 0.3) !important;
 }
 
 /* Accordion/Collapsible styling */
 details {
-    background: #0d1117 !important;
-    border: 1px solid #30363d !important;
-    border-radius: 8px !important;
+    background: rgba(0, 20, 0, 0.8) !important;
+    border: 1px solid #00aa33 !important;
+    border-radius: 6px !important;
     margin-bottom: 16px !important;
     padding: 16px !important;
+    box-shadow: 0 0 15px rgba(0, 255, 65, 0.1) !important;
 }
 
 details summary {
-    color: #58a6ff !important;
+    color: #00ff41 !important;
     font-weight: 600 !important;
     cursor: pointer !important;
     padding: 8px 0 !important;
     font-size: 1.1em !important;
+    text-shadow: 0 0 8px rgba(0, 255, 65, 0.4) !important;
 }
 
 details summary:hover {
-    color: #79c0ff !important;
+    color: #00ff88 !important;
+    text-shadow: 0 0 12px rgba(0, 255, 136, 0.6) !important;
 }
 
 details[open] summary {
-    border-bottom: 1px solid #30363d !important;
+    border-bottom: 1px solid #00aa33 !important;
     margin-bottom: 16px !important;
     padding-bottom: 16px !important;
 }
 
 /* Reasoning trace special styling */
 .reasoning-trace {
-    background: #0d1117 !important;
-    border: 1px solid #30363d !important;
-    border-radius: 8px !important;
+    background: rgba(0, 10, 0, 0.9) !important;
+    border: 1px solid #00aa33 !important;
+    border-radius: 6px !important;
     padding: 16px !important;
     font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace !important;
     line-height: 1.5 !important;
     white-space: pre-wrap !important;
+    color: #00ff41 !important;
+    box-shadow: inset 0 0 20px rgba(0, 255, 65, 0.1) !important;
 }
 
 /* Metrics styling */
 .metrics {
-    background: #161b22 !important;
-    border: 1px solid #30363d !important;
-    border-radius: 6px !important;
+    background: rgba(0, 20, 0, 0.8) !important;
+    border: 1px solid #00aa33 !important;
+    border-radius: 4px !important;
     padding: 12px !important;
-    color: #79c0ff !important;
-    font-weight: 500 !important;
+    color: #00ff88 !important;
+    font-weight: 600 !important;
+    text-shadow: 0 0 5px rgba(0, 255, 136, 0.3) !important;
 }
 
 /* Title styling */
 .app-title {
     text-align: center !important;
-    color: #58a6ff !important;
+    color: #00ff41 !important;
     font-size: 2.5em !important;
     font-weight: 700 !important;
     margin-bottom: 8px !important;
-    text-shadow: 0 0 20px rgba(88, 166, 255, 0.3) !important;
+    text-shadow: 0 0 20px rgba(0, 255, 65, 0.6) !important;
 }
 
 .app-subtitle {
     text-align: center !important;
-    color: #8b949e !important;
+    color: #00cc33 !important;
     font-size: 1.1em !important;
     margin-bottom: 24px !important;
+    text-shadow: 0 0 10px rgba(0, 204, 51, 0.4) !important;
 }
 
 /* Animation for typing effect */
 .typing::after {
-    content: '|' !important;
+    content: '▋' !important;
+    color: #00ff41 !important;
     animation: blink 1s infinite !important;
 }
 
 @keyframes blink {
     0%, 50% { opacity: 1; }
     51%, 100% { opacity: 0; }
+}
+
+/* Additional terminal-like effects */
+.gradio-container::before {
+    content: '' !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 255, 65, 0.03) 2px,
+        rgba(0, 255, 65, 0.03) 4px
+    ) !important;
+    pointer-events: none !important;
+    z-index: 1000 !important;
+}
+
+/* Radio button styling */
+.gr-radio input[type="radio"] {
+    accent-color: #00ff41 !important;
+}
+
+/* Dropdown styling */
+.gr-dropdown select {
+    background: rgba(0, 20, 0, 0.8) !important;
+    color: #00ff41 !important;
+    border: 1px solid #00aa33 !important;
 }
 """
 
@@ -317,18 +365,25 @@ with gr.Blocks(css=homebrew_css, title="🧠 Budget-Aware LLM Reasoning", theme=
             return f"**{case_data['description']}**\n\n*Prompt:* {case_data['prompt']}"
         return ""
     
-    # Event handlers
+    # Event handlers with consistent typing animation
     inputs = [case_study_select, budget_radio, custom_prompt]
     outputs = [reasoning_trace, actual_tokens, final_answer]
     
-    case_study_select.change(update_display, inputs, outputs)
+    # Case study changes - with typing animation
+    case_study_select.change(animate_reasoning, inputs, reasoning_trace)
+    case_study_select.change(lambda *args: update_display(*args)[1:], inputs, [actual_tokens, final_answer])
     case_study_select.change(update_problem_display, case_study_select, problem_display)
+    
+    # Budget changes - with typing animation
     budget_radio.change(animate_reasoning, inputs, reasoning_trace)
     budget_radio.change(lambda *args: update_display(*args)[1:], inputs, [actual_tokens, final_answer])
+    
+    # Custom prompt changes - immediate update
     custom_prompt.change(update_display, inputs, outputs)
     
-    # Initial load
-    demo.load(update_display, inputs, outputs)
+    # Initial load with typing animation
+    demo.load(animate_reasoning, inputs, reasoning_trace)
+    demo.load(lambda *args: update_display(*args)[1:], inputs, [actual_tokens, final_answer])
     demo.load(update_problem_display, case_study_select, problem_display)
 
 if __name__ == "__main__":

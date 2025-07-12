@@ -29,9 +29,9 @@ CASE_STUDIES = {
         "prompt": "What is the capital of the country where the Eiffel Tower is located?",
         "budgets": {
             60: {
-                "response": "Thought: The user is asking for the capital of the country where the Eiffel Tower is. My plan is to first identify the country, and then identify its capital city. \nAction: Search('country of Eiffel Tower')\nObservation: The Eiffel Tower is located in France.",
-                "tokens": 98,
-                "answer": "France"
+                "response": "Thought: Need to find where Eiffel Tower is located.\nAction: Search('Eiffel Tower location')\nObservation: France.\nThought: Now find France's capital.\nAction: Search('France capital')\nObservation: Paris.",
+                "tokens": 58,
+                "answer": "Paris"
             },
             100: {
                 "response": "Thought: I need to find where the Eiffel Tower is, then find the capital of that country. \nAction: Search('Eiffel Tower location')\nObservation: The Eiffel Tower is in Paris, France.\nAction: Search('Capital of France')\nObservation: Paris.\nFinal Answer: Paris",
