@@ -3,4 +3,7 @@
 gradio
 transformers
 tiktoken
-huggingface_hub 
+huggingface_hub
+openai
+requests
+torch 
