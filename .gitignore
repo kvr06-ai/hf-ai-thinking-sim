@@ -3,6 +3,7 @@
 
 # Internal dev documents
 execution-plan.md
+setup_token.py
 
 # Python specifics
 __pycache__/

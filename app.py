@@ -4,166 +4,182 @@
 # This file will be populated in later phases
 import gradio as gr
 import time
-import asyncio
 import tiktoken
 import os
 import requests
-from transformers import pipeline, AutoTokenizer
 from case_studies import CASE_STUDIES
 
-# Configuration
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ .env file loaded")
+except ImportError:
+    print("💡 Install python-dotenv for automatic .env loading: pip install python-dotenv")
+except Exception as e:
+    print(f"⚠️ Could not load .env file: {e}")
+
+# Initialize tokenizer for token counting
+try:
+    tokenizer = tiktoken.get_encoding("cl100k_base")
+except:
+    tokenizer = None
+
+# Models to try in order of preference
+MODELS_TO_TRY = [
+    "meta-llama/Llama-3.1-8B-Instruct",     # Best quality (requires approval)
+    "microsoft/Phi-3-mini-4k-instruct",     # Good reasoning, no approval needed
+    "HuggingFaceH4/zephyr-7b-beta",         # Strong instruction following
+    "mistralai/Mistral-7B-Instruct-v0.1"    # Good performance
+]
+
+# Budget token limits
 BUDGET_MAPPING = {
     'Low': 50,
     'Medium': 110, 
     'High': 200
 }
 
-# Initialize tokenizer for counting tokens
-try:
-    tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
-except:
-    # Fallback tokenizer
-    tokenizer = tiktoken.get_encoding("cl100k_base")
-
-# Initialize local model pipeline (fallback option)
-try:
-    # Use a smaller model for demo purposes
-    local_model = pipeline("text-generation", model="microsoft/DialoGPT-medium", 
-                          tokenizer="microsoft/DialoGPT-medium", device=-1)
-    local_tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-medium")
-except Exception as e:
-    print(f"Local model not available: {e}")
-    local_model = None
-    local_tokenizer = None
-
 def count_tokens(text):
-    """Count tokens in text using tiktoken"""
-    try:
+    """Count tokens using tiktoken or fallback to word count"""
+    if tokenizer:
         return len(tokenizer.encode(text))
-    except:
-        # Fallback: rough estimation
-        return len(text.split()) * 1.3
+    else:
+        # Fallback: estimate 1.3 tokens per word
+        return int(len(text.split()) * 1.3)
 
 def simulate_typing(text, speed=0.03):
-    """Simulate typing effect by yielding partial text"""
+    """Simulate typing effect word by word"""
     words = text.split()
-    current_text = ""
-    for word in words:
-        current_text += word + " "
-        yield current_text.strip()
+    for i in range(len(words)):
+        partial_text = ' '.join(words[:i+1])
+        yield partial_text
         time.sleep(speed)
 
 def create_budget_prompt(original_prompt, budget_tokens, case_type="general"):
-    """Create a prompt with budget constraints"""
+    """Create budget-constrained prompt optimized for instruction-following models"""
     if case_type == "agentic":
-        # For agentic cases like Capital City Finder
-        budget_prompt = f"""You are an AI assistant that uses a structured thinking process. You have a thinking budget of {budget_tokens} tokens for your response.
+        return f"""You are a helpful AI assistant with a thinking budget of {budget_tokens} tokens. Use a structured approach to solve this problem efficiently.
 
-Use this format:
-Thought: [your reasoning]
-Action: [action you would take, like Search('query')]  
-Observation: [simulated result]
-Final Answer: [your final answer]
+{original_prompt}
 
-Keep your total response under {budget_tokens} tokens. Be concise but thorough.
+Please use this format:
+Thought: [your reasoning process]
+Action: [what you would do or search for]
+Observation: [result or information found]
+Final Answer: [your conclusion]
 
-Problem: {original_prompt}"""
-    else:
-        # For general cases
-        budget_prompt = f"""You have a thinking budget of {budget_tokens} tokens for your response. Please solve this problem step by step, but keep your total response under {budget_tokens} tokens.
-
-Problem: {original_prompt}"""
+Keep your total response under {budget_tokens} tokens while being thorough."""
     
-    return budget_prompt
+    else:
+        return f"""You are a helpful AI assistant with a thinking budget of {budget_tokens} tokens. Solve this problem step by step, but be concise and efficient.
+
+{original_prompt}
+
+Please think through this systematically but efficiently. Show your reasoning steps and end with a clear "Final Answer:" statement. Keep your response under {budget_tokens} tokens."""
 
 def query_huggingface_api(prompt, max_tokens=200):
-    """Query Hugging Face Inference API"""
+    """Query Hugging Face Inference API with model fallback"""
     try:
-        # This would use HF_TOKEN environment variable
         hf_token = os.getenv("HF_TOKEN")
         if not hf_token:
+            print("No HF_TOKEN environment variable found")
             return None, "No HF token available"
         
         headers = {"Authorization": f"Bearer {hf_token}"}
         
-        # Using a free model for demo
-        api_url = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium"
-        
-        payload = {
-            "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": max_tokens,
-                "temperature": 0.7,
-                "do_sample": True
+        # Try models in order of preference
+        for model_name in MODELS_TO_TRY:
+            api_url = f"https://api-inference.huggingface.co/models/{model_name}"
+            
+            payload = {
+                "inputs": prompt,
+                "parameters": {
+                    "max_new_tokens": min(max_tokens, 200),
+                    "temperature": 0.7,
+                    "do_sample": True,
+                    "top_p": 0.9,
+                    "return_full_text": False,
+                    "stop": ["<|eot_id|>", "</s>", "<|end|>"]  # Stop tokens for different models
+                }
             }
-        }
+            
+            print(f"🔄 Trying model: {model_name}")
+            
+            try:
+                response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    print(f"✅ Success with {model_name}")
+                    
+                    if isinstance(result, list) and len(result) > 0:
+                        generated_text = result[0].get("generated_text", "")
+                        if generated_text.startswith(prompt):
+                            generated_text = generated_text[len(prompt):].strip()
+                        
+                        if len(generated_text.strip()) > 10:  # Valid response
+                            print(f"Generated text: {generated_text[:100]}...")
+                            return generated_text, None
+                        else:
+                            print(f"Response too short from {model_name}")
+                            continue
+                    else:
+                        print(f"Invalid response format from {model_name}")
+                        continue
+                        
+                elif response.status_code == 503:
+                    print(f"⏳ {model_name} is loading, trying next model...")
+                    continue
+                elif response.status_code == 401:
+                    print(f"🔒 {model_name} requires approval (expected for Llama)")
+                    continue
+                else:
+                    print(f"❌ {model_name} failed: {response.status_code}")
+                    continue
+                    
+            except requests.exceptions.Timeout:
+                print(f"⏱️ {model_name} timed out, trying next model...")
+                continue
+            except Exception as e:
+                print(f"❌ {model_name} error: {str(e)}")
+                continue
         
-        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code == 200:
-            result = response.json()
-            if isinstance(result, list) and len(result) > 0:
-                generated_text = result[0].get("generated_text", "")
-                # Clean up the response
-                if generated_text.startswith(prompt):
-                    generated_text = generated_text[len(prompt):].strip()
-                return generated_text, None
-            else:
-                return None, "Invalid response format"
-        else:
-            return None, f"API error: {response.status_code}"
+        return None, "All models failed - please check your HF token and try again"
             
     except Exception as e:
-        return None, f"API request failed: {str(e)}"
-
-def query_local_model(prompt, max_tokens=200):
-    """Query local model as fallback"""
-    try:
-        if local_model is None:
-            return None, "Local model not available"
-        
-        # Generate response
-        response = local_model(prompt, max_length=len(prompt.split()) + max_tokens, 
-                              num_return_sequences=1, temperature=0.7)
-        
-        if response and len(response) > 0:
-            generated_text = response[0]["generated_text"]
-            # Clean up the response
-            if generated_text.startswith(prompt):
-                generated_text = generated_text[len(prompt):].strip()
-            return generated_text, None
-        else:
-            return None, "No response generated"
-            
-    except Exception as e:
-        return None, f"Local model error: {str(e)}"
+        error_msg = f"API request failed: {str(e)}"
+        print(error_msg)
+        return None, error_msg
 
 def generate_dynamic_response(prompt, budget_level, case_name):
-    """Generate response using LLM with budget constraints"""
+    """Generate response using HF Inference API with budget constraints"""
     budget_tokens = BUDGET_MAPPING[budget_level]
     
+    print(f"🚀 Generating response for: {case_name}, budget: {budget_level} ({budget_tokens} tokens)")
+    
     # Determine case type for appropriate prompting
-    case_type = "agentic" if "Capital City Finder" in case_name else "general"
+    case_type = "agentic" if "Capital City Finder" in str(case_name) else "general"
     
     # Create budget-constrained prompt
     budget_prompt = create_budget_prompt(prompt, budget_tokens, case_type)
     
-    # Try HF API first, then local model, then fallback to static
+    print(f"📝 Budget prompt created, length: {len(budget_prompt)} chars")
+    
+    # Query HF API with fallback models
     response_text, error = query_huggingface_api(budget_prompt, budget_tokens)
     
     if response_text is None:
-        # Try local model
-        response_text, error = query_local_model(budget_prompt, budget_tokens)
-        
-        if response_text is None:
-            # Fallback to static response
-            return get_static_fallback(case_name, budget_level)
+        print(f"❌ All models failed: {error}")
+        return f"❌ Unable to generate response. Please try again.\n\nError: {error}", 0, "No response generated"
     
     # Count actual tokens used
     actual_tokens = count_tokens(response_text)
     
-    # Extract final answer (simple heuristic)
+    # Extract final answer
     final_answer = extract_final_answer(response_text)
+    
+    print(f"✅ Response generated: {actual_tokens} tokens, answer: {final_answer[:50]}...")
     
     return response_text, actual_tokens, final_answer
 
@@ -185,140 +201,46 @@ def extract_final_answer(response_text):
     
     return "No clear answer found"
 
-def get_static_fallback(case_name, budget_level):
-    """Get static response as fallback"""
-    if case_name in CASE_STUDIES:
-        budget_keys = list(CASE_STUDIES[case_name]['budgets'].keys())
-        budget_mapping = {'Low': budget_keys[0], 'Medium': budget_keys[1], 'High': budget_keys[2]}
-        selected_budget = budget_mapping[budget_level]
-        budget_data = CASE_STUDIES[case_name]['budgets'][selected_budget]
-        
-        return (
-            f"[STATIC FALLBACK] {budget_data['response']}", 
-            budget_data['tokens'], 
-            budget_data['answer']
-        )
-    
-    return "Fallback data not available", 0, "N/A"
-
-def update_display(case_name, budget_level, custom_prompt):
-    """Update display with either dynamic LLM response or static fallback"""
-    if custom_prompt.strip():
-        # Handle custom prompts with dynamic LLM
-        try:
-            response_text, actual_tokens, final_answer = generate_dynamic_response(
-                custom_prompt.strip(), budget_level, "Custom"
-            )
-            budget_tokens = BUDGET_MAPPING[budget_level]
-            return response_text, f"🔢 {actual_tokens} / {budget_tokens} tokens", f"✅ {final_answer}"
-        except Exception as e:
-            return f"❌ Error processing custom prompt: {str(e)}", "N/A", "N/A"
-    
-    if not case_name:
-        return "", "", ""
-    
-    selected_case = CASE_STUDIES.get(case_name, {})
-    if not selected_case:
-        return "❌ Case study not found.", "N/A", "N/A"
-    
-    # For pre-defined case studies, use static responses for consistency
-    # But add option to use dynamic inference
-    budget_keys = list(selected_case.get('budgets', {}).keys())
-    if len(budget_keys) < 3:
-        return "❌ Invalid case study data.", "N/A", "N/A"
-    
-    budget_mapping = {'Low': budget_keys[0],
-                      'Medium': budget_keys[1],
-                      'High': budget_keys[2]}
-    selected_budget = budget_mapping.get(budget_level)
-    budget_data = selected_case['budgets'][selected_budget]
-    
-    reasoning_trace = budget_data['response']
-    actual_tokens = f"🔢 {budget_data['tokens']} / {selected_budget} tokens"
-    final_answer = f"✅ {budget_data['answer']}"
-    
-    return reasoning_trace, actual_tokens, final_answer
-
-def animate_reasoning(case_name, budget_level, custom_prompt):
-    """Handle animated typing effect for reasoning trace with dynamic LLM support"""
-    if custom_prompt.strip():
-        # For custom prompts, use dynamic LLM with typing animation
-        try:
-            response_text, actual_tokens, final_answer = generate_dynamic_response(
-                custom_prompt.strip(), budget_level, "Custom"
-            )
-            # Simulate typing effect for dynamic response
-            for partial_text in simulate_typing(response_text):
-                yield partial_text
-        except Exception as e:
-            yield f"❌ Error processing custom prompt: {str(e)}"
-        return
-    
-    if not case_name:
-        yield ""
-        return
-    
-    selected_case = CASE_STUDIES.get(case_name, {})
-    if not selected_case:
-        yield "❌ Case study not found."
-        return
-    
-    budget_keys = list(selected_case.get('budgets', {}).keys())
-    if len(budget_keys) < 3:
-        yield "❌ Invalid case study data."
-        return
-    
-    budget_mapping = {'Low': budget_keys[0],
-                      'Medium': budget_keys[1],
-                      'High': budget_keys[2]}
-    selected_budget = budget_mapping.get(budget_level)
-    budget_data = selected_case['budgets'][selected_budget]
-    
-    reasoning_trace = budget_data['response']
-    
-    # Simulate typing effect for static response
-    for partial_text in simulate_typing(reasoning_trace):
-        yield partial_text
-
-def generate_live_response(case_name, budget_level, custom_prompt):
-    """Generate live LLM response for dynamic inference mode"""
+def generate_response(case_name, budget_level, custom_prompt):
+    """Generate live LLM response via API"""
     if custom_prompt.strip():
         prompt = custom_prompt.strip()
+        case_identifier = "Custom"
     elif case_name and case_name in CASE_STUDIES:
         prompt = CASE_STUDIES[case_name]['prompt']
+        case_identifier = case_name
     else:
         return "❌ No valid prompt available.", "N/A", "N/A"
     
     try:
         response_text, actual_tokens, final_answer = generate_dynamic_response(
-            prompt, budget_level, case_name
+            prompt, budget_level, case_identifier
         )
         budget_tokens = BUDGET_MAPPING[budget_level]
         
-        # Add indicator for live vs static
-        if "[STATIC FALLBACK]" in response_text:
-            token_display = f"🔢 {actual_tokens} / {budget_tokens} tokens (Static)"
-        else:
-            token_display = f"🔢 {actual_tokens} / {budget_tokens} tokens (Live)"
+        token_display = f"🔢 {actual_tokens} / {budget_tokens} tokens"
+        answer_display = f"✅ {final_answer}"
         
-        return response_text, token_display, f"✅ {final_answer}"
+        return response_text, token_display, answer_display
     
     except Exception as e:
-        return f"❌ Error generating live response: {str(e)}", "N/A", "N/A"
+        return f"❌ Error generating response: {str(e)}", "N/A", "N/A"
 
-def animate_live_response(case_name, budget_level, custom_prompt):
-    """Animate live LLM response with typing effect"""
+def animate_response(case_name, budget_level, custom_prompt):
+    """Animate LLM response with typing effect"""
     if custom_prompt.strip():
         prompt = custom_prompt.strip()
+        case_identifier = "Custom"
     elif case_name and case_name in CASE_STUDIES:
         prompt = CASE_STUDIES[case_name]['prompt']
+        case_identifier = case_name
     else:
         yield "❌ No valid prompt available."
         return
     
     try:
         response_text, actual_tokens, final_answer = generate_dynamic_response(
-            prompt, budget_level, case_name
+            prompt, budget_level, case_identifier
         )
         
         # Simulate typing effect for live response
@@ -326,7 +248,7 @@ def animate_live_response(case_name, budget_level, custom_prompt):
             yield partial_text
     
     except Exception as e:
-        yield f"❌ Error generating live response: {str(e)}"
+        yield f"❌ Error generating response: {str(e)}"
 
 # Custom CSS for Homebrew-style theme (matching the green terminal aesthetic)
 homebrew_css = """
@@ -549,18 +471,19 @@ with gr.Blocks(css=homebrew_css, title="🧠 Budget-Aware LLM Reasoning", theme=
         <summary>💡 What is this about and how do I use it?</summary>
         <div style="margin-top: 16px;">
             <p><strong>About this demo:</strong></p>
-            <p>Imagine asking an AI (like ChatGPT) to solve a complex problem. If you give it more time and space to "think" through the steps, it can often produce a more detailed and accurate answer. This "thinking time" is measured in <strong>tokens</strong> (pieces of words).</p>
+            <p>This demo showcases <strong>live budget-aware reasoning</strong> using Meta's Llama 3.1 8B Instruct model. Unlike static examples, this generates real-time responses that adapt to different "thinking budgets" (token limits).</p>
             
-            <p>This simulator demonstrates that concept. It shows how the quality of an AI's reasoning changes when we give it a different <strong>"thinking budget."</strong></p>
+            <p>When you give an AI more tokens to "think," it can provide more detailed reasoning and often more accurate answers. This demo shows how token budgets directly affect reasoning quality.</p>
             
             <p><strong>How to use:</strong></p>
             <ol>
-                <li><strong>Select a Problem:</strong> Pick a problem for the AI to solve from the dropdown menu.</li>
-                <li><strong>Choose a Thinking Level:</strong> Select a "Low," "Medium," or "High" thinking budget.</li>
-                <li><strong>Observe the Results:</strong> You'll see the AI's step-by-step "thought process" and its final answer for the budget you selected.</li>
+                <li><strong>Select a Problem:</strong> Choose from pre-built case studies or enter your own custom prompt.</li>
+                <li><strong>Choose a Thinking Budget:</strong> Select "Low" (50 tokens), "Medium" (110 tokens), or "High" (200 tokens).</li>
+                <li><strong>Watch Live Reasoning:</strong> See how Llama 3.1 adapts its reasoning style to fit within your token budget.</li>
+                <li><strong>Compare Results:</strong> Try the same problem with different budgets to see the quality difference.</li>
             </ol>
             
-            <p>Play around with the levels to see how a bigger budget can change the AI's path to the answer!</p>
+            <p><strong>🚀 Live AI Inference:</strong> All responses are generated in real-time using Meta's Llama 3.1 model - no pre-computed answers!</p>
             
             <p><em>Related research:</em> Li, J., Zhao, W., Zhang, Y., & Gan, C. (2025). <strong>Steering LLM Thinking with Budget Guidance</strong>. <a href="https://arxiv.org/abs/2506.13752" target="_blank">arXiv:2506.13752</a>.</p>
         </div>
@@ -582,13 +505,6 @@ with gr.Blocks(css=homebrew_css, title="🧠 Budget-Aware LLM Reasoning", theme=
                 label="🎚️ Select a Thinking Level", 
                 value='Low',
                 elem_classes=["gr-radio"]
-            )
-            
-            # Dynamic inference toggle
-            dynamic_mode = gr.Checkbox(
-                label="🚀 Enable Dynamic LLM Inference", 
-                value=False,
-                info="Use live LLM calls instead of static responses"
             )
             
             custom_prompt = gr.Textbox(
@@ -638,35 +554,23 @@ with gr.Blocks(css=homebrew_css, title="🧠 Budget-Aware LLM Reasoning", theme=
         return ""
     
     # Update status display
-    def update_status(dynamic_mode_enabled, custom_prompt):
+    def update_status(custom_prompt):
         if custom_prompt.strip():
-            if dynamic_mode_enabled:
-                return "🚀 Dynamic mode: Processing custom prompt..."
-            else:
-                return "⚡ Static mode: Processing custom prompt..."
-        elif dynamic_mode_enabled:
-            return "🚀 Dynamic mode: Ready for live LLM inference"
+            return "🚀 Processing custom prompt with live Llama inference..."
         else:
-            return "⚡ Static mode: Using pre-computed responses"
+            return "🚀 Ready for live Llama inference"
     
     # Main response handler
-    def handle_response(case_name, budget_level, custom_prompt, dynamic_mode_enabled):
-        if dynamic_mode_enabled:
-            return generate_live_response(case_name, budget_level, custom_prompt)
-        else:
-            return update_display(case_name, budget_level, custom_prompt)
+    def handle_response(case_name, budget_level, custom_prompt):
+        return generate_response(case_name, budget_level, custom_prompt)
     
     # Main animation handler
-    def handle_animation(case_name, budget_level, custom_prompt, dynamic_mode_enabled):
-        if dynamic_mode_enabled:
-            for partial_text in animate_live_response(case_name, budget_level, custom_prompt):
-                yield partial_text
-        else:
-            for partial_text in animate_reasoning(case_name, budget_level, custom_prompt):
-                yield partial_text
+    def handle_animation(case_name, budget_level, custom_prompt):
+        for partial_text in animate_response(case_name, budget_level, custom_prompt):
+            yield partial_text
     
-    # Event handlers with dynamic/static mode support
-    inputs = [case_study_select, budget_radio, custom_prompt, dynamic_mode]
+    # Event handlers
+    inputs = [case_study_select, budget_radio, custom_prompt]
     outputs = [reasoning_trace, actual_tokens, final_answer]
     
     # Case study changes
@@ -678,8 +582,8 @@ with gr.Blocks(css=homebrew_css, title="🧠 Budget-Aware LLM Reasoning", theme=
     )
     case_study_select.change(update_problem_display, case_study_select, problem_display)
     case_study_select.change(
-        lambda case_name, budget_level, custom_prompt, dynamic_mode_enabled: 
-        update_status(dynamic_mode_enabled, custom_prompt),
+        lambda case_name, budget_level, custom_prompt: 
+        update_status(custom_prompt),
         inputs, status_display
     )
     
@@ -691,8 +595,8 @@ with gr.Blocks(css=homebrew_css, title="🧠 Budget-Aware LLM Reasoning", theme=
         lambda *args: handle_response(*args)[1:], inputs, [actual_tokens, final_answer]
     )
     budget_radio.change(
-        lambda case_name, budget_level, custom_prompt, dynamic_mode_enabled: 
-        update_status(dynamic_mode_enabled, custom_prompt),
+        lambda case_name, budget_level, custom_prompt: 
+        update_status(custom_prompt),
         inputs, status_display
     )
     
@@ -704,21 +608,8 @@ with gr.Blocks(css=homebrew_css, title="🧠 Budget-Aware LLM Reasoning", theme=
         lambda *args: handle_response(*args)[1:], inputs, [actual_tokens, final_answer]
     )
     custom_prompt.change(
-        lambda case_name, budget_level, custom_prompt, dynamic_mode_enabled: 
-        update_status(dynamic_mode_enabled, custom_prompt),
-        inputs, status_display
-    )
-    
-    # Dynamic mode toggle
-    dynamic_mode.change(
-        handle_animation, inputs, reasoning_trace
-    )
-    dynamic_mode.change(
-        lambda *args: handle_response(*args)[1:], inputs, [actual_tokens, final_answer]
-    )
-    dynamic_mode.change(
-        lambda case_name, budget_level, custom_prompt, dynamic_mode_enabled: 
-        update_status(dynamic_mode_enabled, custom_prompt),
+        lambda case_name, budget_level, custom_prompt: 
+        update_status(custom_prompt),
         inputs, status_display
     )
     
@@ -731,8 +622,8 @@ with gr.Blocks(css=homebrew_css, title="🧠 Budget-Aware LLM Reasoning", theme=
     )
     demo.load(update_problem_display, case_study_select, problem_display)
     demo.load(
-        lambda case_name, budget_level, custom_prompt, dynamic_mode_enabled: 
-        update_status(dynamic_mode_enabled, custom_prompt),
+        lambda case_name, budget_level, custom_prompt: 
+        update_status(custom_prompt),
         inputs, status_display
     )
 
